@@ -20,6 +20,7 @@ class ProviderInfo:
 # Ordered for display in the wizard dropdown. Mirrors the providers that
 # hindsight-api's PROVIDER_DEFAULT_MODELS supports.
 PROVIDER_CATALOG: tuple[ProviderInfo, ...] = (
+    ProviderInfo("aimlapi", "aimlapi.com", needs_api_key=True, default_base_url="https://api.aimlapi.com/v1"),
     ProviderInfo("openai", "OpenAI", needs_api_key=True, default_base_url="https://api.openai.com/v1"),
     ProviderInfo("anthropic", "Anthropic", needs_api_key=True, default_base_url="https://api.anthropic.com"),
     ProviderInfo("gemini", "Google Gemini", needs_api_key=True),

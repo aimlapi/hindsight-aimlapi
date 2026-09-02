@@ -19,6 +19,7 @@ Used for fact extraction, entity resolution, mental model consolidation, and ans
 
 **Supported providers:**
 
+- aimlapi.com
 - OpenAI
 - OpenAI Responses
 - Anthropic
@@ -38,7 +39,6 @@ Used for fact extraction, entity resolution, mental model consolidation, and ans
 - Volcano Engine
 - OpenRouter
 - Requesty
-- aimlapi.com
 - OpenAI Codex
 - Claude Code
 - GitHub Copilot
@@ -104,6 +104,7 @@ Beyond basic generation, some providers support optional features that lower cos
 
 | Provider | Batch API | Explicit prompt caching |
 |----------|:---------:|:-----------------------:|
+| aimlapi.com (`aimlapi`) | — | — |
 | OpenAI (`openai`) | ✅ | — |
 | OpenAI Responses (`openai-responses`) | — | — |
 | Anthropic (`anthropic`) | — | — |
@@ -123,7 +124,6 @@ Beyond basic generation, some providers support optional features that lower cos
 | Volcano Engine (`volcano`) | — | — |
 | OpenRouter (`openrouter`) | — | — |
 | Requesty (`requesty`) | — | — |
-| aimlapi.com (`aimlapi`) | — | — |
 | OpenAI Codex (`openai-codex`) | — | — |
 | Claude Code (`claude-code`) | — | — |
 | GitHub Copilot (`github-copilot`) | — | — |
@@ -173,6 +173,7 @@ Each provider has a recommended default model that's used when `HINDSIGHT_API_LL
 
 | Provider | Default Model |
 |----------|--------------|
+| `aimlapi` | `openai/gpt-5-mini` |
 | `openai` | `gpt-4o-mini` |
 | `openai-responses` | `gpt-5.6` |
 | `anthropic` | `claude-haiku-4-5` |
@@ -192,7 +193,6 @@ Each provider has a recommended default model that's used when `HINDSIGHT_API_LL
 | `volcano` | `doubao-pro-32k` |
 | `openrouter` | `qwen/qwen3.5-9b` |
 | `requesty` | `openai/gpt-4o-mini` |
-| `aimlapi` | `openai/gpt-5-mini` |
 | `openai-codex` | `gpt-5.4-mini` |
 | `claude-code` | `claude-sonnet-4-5-20250929` |
 | `github-copilot` | `gpt-5.6-terra` |

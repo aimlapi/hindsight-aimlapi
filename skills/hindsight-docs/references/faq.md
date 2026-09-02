@@ -69,6 +69,7 @@ Browse all supported integrations in the Integrations Hub.
 
 ### Which LLM providers are supported?
 
+- aimlapi.com
 - OpenAI
 - OpenAI Responses
 - Anthropic
@@ -88,7 +89,6 @@ Browse all supported integrations in the Integrations Hub.
 - Volcano Engine
 - OpenRouter
 - Requesty
-- aimlapi.com
 - OpenAI Codex
 - Claude Code
 - GitHub Copilot
