@@ -88,6 +88,7 @@ Browse all supported integrations in the Integrations Hub.
 - Volcano Engine
 - OpenRouter
 - Requesty
+- aimlapi.com
 - OpenAI Codex
 - Claude Code
 - GitHub Copilot

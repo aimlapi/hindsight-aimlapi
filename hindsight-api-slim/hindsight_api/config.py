@@ -12,6 +12,7 @@ import sys
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from dotenv import find_dotenv, load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -498,6 +499,11 @@ ENV_RERANKER_OPENROUTER_BASE_URL = "HINDSIGHT_API_RERANKER_OPENROUTER_BASE_URL"
 ENV_REQUESTY_API_KEY = "HINDSIGHT_API_REQUESTY_API_KEY"
 ENV_EMBEDDINGS_REQUESTY_API_KEY = "HINDSIGHT_API_EMBEDDINGS_REQUESTY_API_KEY"
 ENV_EMBEDDINGS_REQUESTY_MODEL = "HINDSIGHT_API_EMBEDDINGS_REQUESTY_MODEL"
+
+# AI/ML API configuration (aimlapi.com — OpenAI-compatible gateway; embeddings)
+ENV_AIMLAPI_API_KEY = "HINDSIGHT_API_AIMLAPI_API_KEY"
+ENV_EMBEDDINGS_AIMLAPI_API_KEY = "HINDSIGHT_API_EMBEDDINGS_AIMLAPI_API_KEY"
+ENV_EMBEDDINGS_AIMLAPI_MODEL = "HINDSIGHT_API_EMBEDDINGS_AIMLAPI_MODEL"
 
 # ZeroEntropy configuration (embeddings)
 ENV_EMBEDDINGS_ZEROENTROPY_API_KEY = "HINDSIGHT_API_EMBEDDINGS_ZEROENTROPY_API_KEY"
@@ -1019,6 +1025,7 @@ PROVIDER_DEFAULT_MODELS = {
     "volcano": "doubao-pro-32k",
     "openrouter": "qwen/qwen3.5-9b",
     "requesty": "openai/gpt-4o-mini",
+    "aimlapi": "openai/gpt-5-mini",
     "fireworks": "accounts/fireworks/models/llama-v3p1-8b-instruct",
     "nous": "deepseek/deepseek-v4-flash",
     "xai-oauth": "grok-4.5",
@@ -1304,6 +1311,44 @@ DEFAULT_RERANKER_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/rerank"
 
 # Requesty defaults
 DEFAULT_EMBEDDINGS_REQUESTY_MODEL = "openai/text-embedding-3-small"
+
+# AI/ML API defaults
+DEFAULT_EMBEDDINGS_AIMLAPI_MODEL = "openai/text-embedding-3-small"
+
+# Attribution headers sent with AI/ML API requests. The gateway reads them to
+# attribute traffic to the calling application; a request without them is
+# indistinguishable from anonymous use. They identify Hindsight — nothing about
+# the operator or their data is in them — and are applied only when the resolved
+# base URL is the aimlapi.com host below, so they can never ride a request to a
+# different provider or to a proxy that merely fronts the same wire format.
+AIMLAPI_ATTRIBUTION_HOST = "api.aimlapi.com"
+AIMLAPI_ATTRIBUTION_HEADERS: dict[str, str] = {
+    "HTTP-Referer": "https://github.com/vectorize-io/hindsight",
+    "X-Title": "Hindsight",
+    "X-AIMLAPI-Partner-ID": "part_hindsight",
+    "X-AIMLAPI-Source": "agent/hindsight",
+}
+
+
+def aimlapi_default_headers(
+    provider: str,
+    base_url: str | None,
+    default_headers: dict[str, str] | None,
+) -> dict[str, str] | None:
+    """Merge the AI/ML API attribution headers *under* operator-supplied headers.
+
+    Returns ``default_headers`` unchanged for any other provider or host, so no
+    existing provider's request shape moves. When it does apply it builds a new
+    dict: ``AIMLAPI_ATTRIBUTION_HEADERS`` is never mutated (it is shared by every
+    client in the process), and an operator who set the same key in
+    ``HINDSIGHT_API_LLM_DEFAULT_HEADERS`` still wins.
+    """
+    if provider != "aimlapi" or not base_url:
+        return default_headers
+    if (urlparse(base_url).hostname or "").lower() != AIMLAPI_ATTRIBUTION_HOST:
+        return default_headers
+    return {**AIMLAPI_ATTRIBUTION_HEADERS, **(default_headers or {})}
+
 
 # ZeroEntropy defaults
 DEFAULT_EMBEDDINGS_ZEROENTROPY_MODEL = "zembed-1"
@@ -2853,6 +2898,8 @@ class HindsightConfig:
     embeddings_openrouter_model: str
     embeddings_requesty_api_key: str | None
     embeddings_requesty_model: str
+    embeddings_aimlapi_api_key: str | None
+    embeddings_aimlapi_model: str
     embeddings_litellm_api_base: str
     embeddings_litellm_api_key: str | None
     embeddings_litellm_model: str
@@ -4091,6 +4138,11 @@ class HindsightConfig:
             or os.getenv(ENV_REQUESTY_API_KEY)
             or os.getenv(ENV_LLM_API_KEY),
             embeddings_requesty_model=os.getenv(ENV_EMBEDDINGS_REQUESTY_MODEL, DEFAULT_EMBEDDINGS_REQUESTY_MODEL),
+            # AI/ML API embeddings (with fallback to shared AI/ML API key, then LLM key)
+            embeddings_aimlapi_api_key=os.getenv(ENV_EMBEDDINGS_AIMLAPI_API_KEY)
+            or os.getenv(ENV_AIMLAPI_API_KEY)
+            or os.getenv(ENV_LLM_API_KEY),
+            embeddings_aimlapi_model=os.getenv(ENV_EMBEDDINGS_AIMLAPI_MODEL, DEFAULT_EMBEDDINGS_AIMLAPI_MODEL),
             # ZeroEntropy embeddings
             embeddings_zeroentropy_api_key=os.getenv(ENV_EMBEDDINGS_ZEROENTROPY_API_KEY)
             or os.getenv("ZEROENTROPY_API_KEY"),
