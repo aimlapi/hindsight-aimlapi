@@ -1325,7 +1325,7 @@ AIMLAPI_ATTRIBUTION_HOST = "api.aimlapi.com"
 AIMLAPI_ATTRIBUTION_HEADERS: dict[str, str] = {
     "HTTP-Referer": "https://github.com/vectorize-io/hindsight",
     "X-Title": "Hindsight",
-    "X-AIMLAPI-Partner-ID": "part_hindsight",
+    "X-AIMLAPI-Partner-ID": "part_fO6J5vQsER4jNM0YFhQkld2H",
     "X-AIMLAPI-Source": "agent/hindsight",
 }
 
