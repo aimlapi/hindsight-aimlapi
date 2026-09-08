@@ -19,6 +19,7 @@ Used for fact extraction, entity resolution, mental model consolidation, and ans
 
 **Supported providers:**
 
+- aimlapi.com
 - OpenAI
 - OpenAI Responses
 - Anthropic
@@ -103,6 +104,7 @@ Beyond basic generation, some providers support optional features that lower cos
 
 | Provider | Batch API | Explicit prompt caching |
 |----------|:---------:|:-----------------------:|
+| aimlapi.com (`aimlapi`) | — | — |
 | OpenAI (`openai`) | ✅ | — |
 | OpenAI Responses (`openai-responses`) | — | — |
 | Anthropic (`anthropic`) | — | — |
@@ -171,6 +173,7 @@ Each provider has a recommended default model that's used when `HINDSIGHT_API_LL
 
 | Provider | Default Model |
 |----------|--------------|
+| `aimlapi` | `openai/gpt-5-mini` |
 | `openai` | `gpt-4o-mini` |
 | `openai-responses` | `gpt-5.6` |
 | `anthropic` | `claude-haiku-4-5` |

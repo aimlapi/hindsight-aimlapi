@@ -54,6 +54,7 @@ from ..config import (
     ENV_EMBEDDINGS_ZEROENTROPY_DIMENSIONS,
     ENV_EMBEDDINGS_ZEROENTROPY_ENCODING_FORMAT,
     ENV_LLM_API_KEY,
+    aimlapi_default_headers,
 )
 from .bank_attribution import apply_bank_attribution
 from .local_device import (
@@ -890,6 +891,7 @@ class OpenAIEmbeddings(Embeddings):
         max_retries: int = 3,
         query_prefix: str = "",
         passage_prefix: str = "",
+        default_headers: dict[str, str] | None = None,
     ):
         """
         Initialize OpenAI embeddings client.
@@ -903,6 +905,8 @@ class OpenAIEmbeddings(Embeddings):
             max_retries: Maximum number of retries for failed requests (default: 3)
             query_prefix: Prefix prepended to recall/search queries (default: none)
             passage_prefix: Prefix prepended to retained document text (default: none)
+            default_headers: Custom headers passed to the OpenAI client. None (the
+                default) sends no extra headers, so every existing caller is unchanged.
         """
         self.api_key = api_key
         self.model = model
@@ -912,6 +916,7 @@ class OpenAIEmbeddings(Embeddings):
         self.max_retries = max_retries
         self.query_prefix = query_prefix
         self.passage_prefix = passage_prefix
+        self.default_headers = default_headers
         self._client = None
         self._dimension: int | None = None
 
@@ -942,6 +947,8 @@ class OpenAIEmbeddings(Embeddings):
         # Parse query parameters from base_url (e.g. ?api-version=xxx for Azure OpenAI)
         # and pass them as default_query so they're included in every request.
         client_kwargs = {"api_key": self.api_key, "max_retries": self.max_retries}
+        if self.default_headers:
+            client_kwargs["default_headers"] = self.default_headers
         if self.base_url:
             parsed = urlparse(self.base_url)
             if parsed.query:
@@ -2224,6 +2231,24 @@ def create_embeddings_from_env() -> Embeddings:
             ),
             config,
         )
+    elif provider == "aimlapi":
+        api_key = config.embeddings_aimlapi_api_key
+        if not api_key:
+            raise ValueError(
+                "HINDSIGHT_API_EMBEDDINGS_AIMLAPI_API_KEY, HINDSIGHT_API_AIMLAPI_API_KEY, "
+                f"or {ENV_LLM_API_KEY} is required when {ENV_EMBEDDINGS_PROVIDER} is 'aimlapi'"
+            )
+        aimlapi_base_url = "https://api.aimlapi.com/v1"
+        return OpenAIEmbeddings(
+            api_key=api_key,
+            model=config.embeddings_aimlapi_model,
+            base_url=aimlapi_base_url,
+            batch_size=config.embeddings_openai_batch_size,
+            dimensions=config.embeddings_openai_dimensions,
+            query_prefix=query_prefix,
+            passage_prefix=passage_prefix,
+            default_headers=aimlapi_default_headers("aimlapi", aimlapi_base_url, None),
+        )
     elif provider == "zeroentropy":
         api_key = config.embeddings_zeroentropy_api_key
         if not api_key:
@@ -2314,6 +2339,7 @@ def create_embeddings_from_env() -> Embeddings:
     else:
         raise ValueError(
             f"Unknown embeddings provider: {provider}. "
-            f"Supported: 'local', 'onnx', 'tei', 'openai', 'openai-codex', 'openrouter', 'requesty', 'cohere', 'google', "
+            f"Supported: 'local', 'onnx', 'tei', 'openai', 'openai-codex', 'openrouter', 'requesty', 'aimlapi', "
+            f"'cohere', 'google', "
             f"'zeroentropy', 'litellm', 'litellm-sdk'"
         )

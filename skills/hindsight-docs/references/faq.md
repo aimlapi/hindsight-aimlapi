@@ -69,6 +69,7 @@ Browse all supported integrations in the Integrations Hub.
 
 ### Which LLM providers are supported?
 
+- aimlapi.com
 - OpenAI
 - OpenAI Responses
 - Anthropic

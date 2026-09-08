@@ -35,7 +35,7 @@ from urllib.parse import parse_qs, urlparse, urlunparse
 import httpx
 from openai import APIConnectionError, APIStatusError, AsyncOpenAI, LengthFinishReasonError
 
-from hindsight_api.config import DEFAULT_LLM_TIMEOUT, ENV_LLM_TIMEOUT
+from hindsight_api.config import DEFAULT_LLM_TIMEOUT, ENV_LLM_TIMEOUT, aimlapi_default_headers
 from hindsight_api.engine.bank_attribution import apply_bank_attribution
 from hindsight_api.engine.cache_affinity import (
     CacheAffinityMode,
@@ -748,6 +748,7 @@ class OpenAICompatibleLLM(LLMInterface):
             "volcano",
             "openrouter",
             "requesty",
+            "aimlapi",
             "zai",
             "opencode-go",
             "atlas",
@@ -775,6 +776,8 @@ class OpenAICompatibleLLM(LLMInterface):
                 self.base_url = "https://openrouter.ai/api/v1"
             elif self.provider == "requesty":
                 self.base_url = "https://router.requesty.ai/v1"
+            elif self.provider == "aimlapi":
+                self.base_url = "https://api.aimlapi.com/v1"
             elif self.provider == "zai":
                 self.base_url = "https://api.z.ai/api/coding/paas/v4"
             elif self.provider == "opencode-go":
@@ -807,6 +810,7 @@ class OpenAICompatibleLLM(LLMInterface):
                 "deepseek",
                 "openrouter",
                 "requesty",
+                "aimlapi",
                 "zai",
                 "opencode-go",
                 "atlas",
@@ -836,6 +840,10 @@ class OpenAICompatibleLLM(LLMInterface):
         )
 
         # Create OpenAI client — extract query params from base_url (e.g. Azure api-version)
+        # Attribution rides on the resolved provider, not a hardcoded host: it is attached
+        # only for the aimlapi provider and never travels to another vendor or a proxy.
+        default_headers = aimlapi_default_headers(self.provider, self.base_url, default_headers)
+
         client_kwargs: dict[str, Any] = {
             "api_key": self.api_key,
             "max_retries": 0,
