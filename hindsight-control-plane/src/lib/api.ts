@@ -504,6 +504,37 @@ export class ControlPlaneClient {
   }
 
   /**
+   * Clone a bank into a new one.
+   *
+   * Returns the id of the background operation, which is recorded against the
+   * *source* bank — the target does not exist yet when the clone is submitted.
+   * A flag left undefined is not sent, so the server's default decides.
+   */
+  async cloneBank(
+    bankId: string,
+    targetBankId: string,
+    options?: {
+      includeData?: boolean;
+      includeBankConfig?: boolean;
+      includeHistory?: boolean;
+    }
+  ) {
+    return this.fetchApi<{ operation_id: string; status: string }>(bankApi(bankId, "/clone"), {
+      method: "POST",
+      body: JSON.stringify({
+        target_bank_id: targetBankId,
+        ...(options?.includeData !== undefined ? { include_data: options.includeData } : {}),
+        ...(options?.includeBankConfig !== undefined
+          ? { include_bank_config: options.includeBankConfig }
+          : {}),
+        ...(options?.includeHistory !== undefined
+          ? { include_history: options.includeHistory }
+          : {}),
+      }),
+    });
+  }
+
+  /**
    * Recall memories
    */
   async recall(params: {
@@ -1561,8 +1592,9 @@ export class ControlPlaneClient {
       params.append("offset", String(options.offset));
     }
     const query = params.toString();
-    // Shape of the default detail="full"; lighter levels omit the fields below
-    // last_refreshed_at, so narrow the result when you ask for one.
+    // Shape of detail="full"; the endpoint DEFAULTS to "metadata", which omits
+    // source_query/content/max_tokens/trigger (they come back null), so pass
+    // detail explicitly when you need any of the fields below last_refreshed_at.
     return this.fetchApi<{
       items: Array<{
         id: string;
@@ -1642,7 +1674,7 @@ export class ControlPlaneClient {
         refresh_after_consolidation: boolean;
         refresh_cron?: string | null;
         min_refresh_interval_seconds?: number | null;
-        fact_types?: Array<"world" | "experience" | "observation">;
+        fact_types?: Array<"world" | "experience" | "observation"> | null;
         exclude_mental_models?: boolean;
         exclude_mental_model_ids?: string[];
         tags_match?: TagsMatch;
@@ -1688,7 +1720,7 @@ export class ControlPlaneClient {
         refresh_after_consolidation: boolean;
         refresh_cron?: string | null;
         min_refresh_interval_seconds?: number | null;
-        fact_types?: Array<"world" | "experience" | "observation">;
+        fact_types?: Array<"world" | "experience" | "observation"> | null;
         exclude_mental_models?: boolean;
         exclude_mental_model_ids?: string[];
         tags_match?: TagsMatch;

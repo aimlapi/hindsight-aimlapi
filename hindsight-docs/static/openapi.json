@@ -10,7 +10,7 @@
       "name": "Apache 2.0",
       "url": "https://www.apache.org/licenses/LICENSE-2.0.html"
     },
-    "version": "0.9.2"
+    "version": "0.10.0"
   },
   "paths": {
     "/health": {
@@ -1671,11 +1671,11 @@
                 "full"
               ],
               "type": "string",
-              "description": "Detail level: 'metadata' (names/tags only), 'content' (adds content/config), 'full' (includes reflect_response)",
-              "default": "full",
+              "description": "Detail level: 'metadata' (names/tags/staleness \u2014 the default), 'content' (adds content/config), 'full' (includes reflect_response). Content is opt-in: it is returned only when explicitly requested.",
+              "default": "metadata",
               "title": "Detail"
             },
-            "description": "Detail level: 'metadata' (names/tags only), 'content' (adds content/config), 'full' (includes reflect_response)"
+            "description": "Detail level: 'metadata' (names/tags/staleness \u2014 the default), 'content' (adds content/config), 'full' (includes reflect_response). Content is opt-in: it is returned only when explicitly requested."
           },
           {
             "name": "limit",
@@ -3646,7 +3646,7 @@
           "Documents"
         ],
         "summary": "Update document",
-        "description": "Update mutable fields on a document without re-processing its content.\n\n**Tags** (`tags`): Propagated to all associated memory units. Observations derived from those units are invalidated and queued for re-consolidation under the new tags. Co-source memories from other documents that shared those observations are also reset.\n\nAt least one field must be provided.",
+        "description": "Update mutable fields on a document without re-processing its content.\n\n**Tags** (`tags`): The array REPLACES the document's tags, it is not merged into them \u2014 send the complete set you want the document to end up with, and any tag you leave out is dropped. An empty array (`[]`) therefore clears every tag; only omitting the field entirely is rejected (422).\n\nThe new tags are propagated to all associated memory units. Observations derived from those units are invalidated and queued for re-consolidation under the new tags. Co-source memories from other documents that shared those observations are also reset. Tags are compared as a set, so re-sending the tags a document already has (in any order) changes nothing and queues no re-consolidation.\n\nAt least one field must be provided.",
         "operationId": "update_document",
         "parameters": [
           {
@@ -4843,6 +4843,18 @@
               }
             }
           }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "Manifest",
+                "description": "Bank template manifest",
+                "$ref": "#/components/schemas/BankTemplateManifest"
+              }
+            }
+          }
         }
       }
     },
@@ -4972,6 +4984,7 @@
         "summary": "Import documents (async)",
         "description": "Submit a transfer archive (produced by the export endpoint) for import into a bank. Runs as a background operation: facts are re-embedded with the target bank's embedding model and entities are re-resolved \u2014 no LLM extraction. Returns an operation_id; poll GET /v1/default/banks/{bank_id}/operations/{operation_id} for status and the imported/skipped counts in result_metadata. Use on_conflict to control existing document ids: skip (default), replace, or new-id.",
         "operationId": "import_documents",
+        "deprecated": true,
         "parameters": [
           {
             "name": "bank_id",
@@ -5053,6 +5066,7 @@
         "summary": "Export documents (async)",
         "description": "Submit an async export of a bank's documents (extracted facts, entity names, causal links, chunks) as a transfer ZIP archive. Embeddings and database ids are not included \u2014 importing re-embeds with the target bank's model and re-resolves entities. Runs as a background operation to avoid pinning the API on large banks. Returns an operation_id; poll GET /v1/default/banks/{bank_id}/operations/{operation_id}. On completion the operation's result_metadata carries download_url (fetch the ZIP from GET /v1/default/files/download/{key}), storage_key, byte_size, and filename. Pass document_id query params to export specific documents, or omit to export the whole bank; include_observations=true carries consolidated observations and include_knowledge_base=true carries Mental Models plus Knowledge Pages (all whole-bank export only).",
         "operationId": "export_documents",
+        "deprecated": true,
         "parameters": [
           {
             "name": "bank_id",
@@ -5149,6 +5163,399 @@
         }
       }
     },
+    "/v1/default/banks/{bank_id}/transfer/export": {
+      "post": {
+        "tags": [
+          "Bank Transfer"
+        ],
+        "summary": "Export a bank (async)",
+        "description": "Submit an async export of a bank as a transfer ZIP archive. Three flags choose what the archive carries: include_data (documents, facts, observations, attachments and their bytes, the curation archive, the operations log and the maintenance queues), include_bank_config (bank config, mental models and their history, knowledge pages), include_bank_config (the bank's config overrides, directives and webhooks) and include_history (audit_log, llm_requests). Embeddings and database ids are never carried \u2014 importing re-embeds with the target bank's model and re-resolves entities, so an archive moves between instances configured with different embedding models. Returns an operation_id; poll GET /v1/default/banks/{bank_id}/operations/{operation_id}, then fetch the archive from the download_url in its result_metadata. Pass document_id to export specific documents instead of the whole bank (a document subset carries no bank-level sections).",
+        "operationId": "export_bank_transfer",
+        "parameters": [
+          {
+            "name": "bank_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bank Id"
+            }
+          },
+          {
+            "name": "include_data",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Carry the memories and everything backing them",
+              "default": true,
+              "title": "Include Data"
+            },
+            "description": "Carry the memories and everything backing them"
+          },
+          {
+            "name": "include_bank_config",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Carry the bank's config overrides, directives and webhooks",
+              "default": true,
+              "title": "Include Bank Config"
+            },
+            "description": "Carry the bank's config overrides, directives and webhooks"
+          },
+          {
+            "name": "include_history",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Carry audit_log and llm_requests",
+              "default": false,
+              "title": "Include History"
+            },
+            "description": "Carry audit_log and llm_requests"
+          },
+          {
+            "name": "document_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Document id(s); omit for the whole bank",
+              "title": "Document Id"
+            },
+            "description": "Document id(s); omit for the whole bank"
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankTransferSubmitResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The bank does not exist."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/default/banks/{bank_id}/transfer/import": {
+      "post": {
+        "tags": [
+          "Bank Transfer"
+        ],
+        "summary": "Import a bank (async)",
+        "description": "Submit a transfer archive (produced by the export endpoint) for import. Runs as a background operation: facts are re-embedded with the target bank's embedding model and entities are re-resolved \u2014 no LLM extraction, so the import costs no tokens and invents no new facts.\n\nTwo modes. `restore` (default) writes a whole bank into target_bank_id, which must NOT already exist \u2014 it restores a bank rather than merging into one, and is how a bank is moved between instances or copied under a new id. `merge` folds an archive's documents into this bank, with document_conflict deciding what happens to ids that already exist (skip, replace, new-id).\n\nThe include flags narrow what is restored to a subset of what the archive holds; they cannot add what the producer did not export. Returns an operation_id; poll GET /v1/default/banks/{bank_id}/operations/{operation_id} for status and per-component counts. The operation is recorded against {bank_id} even in restore mode, because the target bank does not exist yet.",
+        "operationId": "import_bank_transfer",
+        "parameters": [
+          {
+            "name": "bank_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bank Id"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "restore (into a fresh bank) | merge (into this bank)",
+              "default": "restore",
+              "title": "Mode"
+            },
+            "description": "restore (into a fresh bank) | merge (into this bank)"
+          },
+          {
+            "name": "target_bank_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "restore mode: the bank to create; defaults to the archive's source bank",
+              "title": "Target Bank Id"
+            },
+            "description": "restore mode: the bank to create; defaults to the archive's source bank"
+          },
+          {
+            "name": "document_conflict",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "merge mode: skip | replace | new-id",
+              "default": "skip",
+              "title": "Document Conflict"
+            },
+            "description": "merge mode: skip | replace | new-id"
+          },
+          {
+            "name": "include_data",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "restore mode: carry the memories and everything backing them (default true)",
+              "title": "Include Data"
+            },
+            "description": "restore mode: carry the memories and everything backing them (default true)"
+          },
+          {
+            "name": "include_bank_config",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "restore mode: restore the bank's config overrides, directives and webhooks (default true)",
+              "title": "Include Bank Config"
+            },
+            "description": "restore mode: restore the bank's config overrides, directives and webhooks (default true)"
+          },
+          {
+            "name": "include_history",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "restore mode: carry audit_log and llm_requests (default false)",
+              "title": "Include History"
+            },
+            "description": "restore mode: carry audit_log and llm_requests (default false)"
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_bank_transfer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankTransferSubmitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/default/banks/{bank_id}/clone": {
+      "post": {
+        "tags": [
+          "Bank Transfer"
+        ],
+        "summary": "Clone a bank (async)",
+        "description": "Copy this bank into a new one, in a single call. The clone starts with the source's memories as they are at clone time and evolves independently from then on: later retains, consolidation and edits on either bank leave the other alone.\n\nThis is the export and import above run back to back on this instance, so nothing is re-extracted and no LLM is called \u2014 facts are re-embedded and entities re-resolved, exactly as a restore does. The same three flags choose what the clone inherits: include_data (documents, facts, observations, attachments, the curation archive, the operations log, and the mental models and knowledge pages synthesized from them), include_bank_config (the bank's config overrides, directives and **webhooks**) and include_history (audit_log, llm_requests).\n\nNote the webhooks: they travel with the bank's configuration, so a clone made with the default flags will call the source's webhook endpoints. Pass include_bank_config=false, or delete them on the clone, when they point at a per-bank consumer.\n\ntarget_bank_id must not already exist. Returns an operation_id, recorded against the source bank (the target does not exist yet); poll GET /v1/default/banks/{bank_id}/operations/{operation_id} for status and the per-component counts.",
+        "operationId": "clone_bank",
+        "parameters": [
+          {
+            "name": "bank_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bank Id"
+            }
+          },
+          {
+            "name": "target_bank_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Bank to create; must not already exist",
+              "title": "Target Bank Id"
+            },
+            "description": "Bank to create; must not already exist"
+          },
+          {
+            "name": "include_data",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Copy the memories, what backs them, and the mental models and knowledge pages synthesized from them",
+              "default": true,
+              "title": "Include Data"
+            },
+            "description": "Copy the memories, what backs them, and the mental models and knowledge pages synthesized from them"
+          },
+          {
+            "name": "include_bank_config",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Copy the bank's config overrides, directives and webhooks",
+              "default": true,
+              "title": "Include Bank Config"
+            },
+            "description": "Copy the bank's config overrides, directives and webhooks"
+          },
+          {
+            "name": "include_history",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Copy audit_log and llm_requests",
+              "default": false,
+              "title": "Include History"
+            },
+            "description": "Copy audit_log and llm_requests"
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankTransferSubmitResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The bank does not exist."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/default/banks/{bank_id}/attachments/{attachment_id}": {
       "get": {
         "tags": [
@@ -5197,10 +5604,12 @@
           "200": {
             "description": "Attachment bytes",
             "content": {
-              "application/json": {
-                "schema": {}
-              },
-              "application/octet-stream": {}
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
             }
           },
           "422": {
@@ -5255,10 +5664,12 @@
           "200": {
             "description": "Stored file",
             "content": {
-              "application/json": {
-                "schema": {}
-              },
-              "application/zip": {}
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
             }
           },
           "422": {
@@ -8164,6 +8575,19 @@
             "title": "Reflect Source Facts Max Tokens",
             "description": "Max tokens of source facts per reflect call"
           },
+          "knowledge_page_default_trigger": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Page Default Trigger",
+            "description": "Trigger fields merged over the built-in knowledge-page default when a page is created (e.g. {\"refresh_cron\": \"0 * * * *\"}). A trigger sent with the create request still wins."
+          },
           "mental_model_min_refresh_interval_seconds": {
             "anyOf": [
               {
@@ -8657,6 +9081,25 @@
         "title": "BankTemplateMentalModel",
         "description": "A mental model definition within a bank template manifest."
       },
+      "BankTransferSubmitResponse": {
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "title": "Operation Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "pending"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operation_id"
+        ],
+        "title": "BankTransferSubmitResponse",
+        "description": "Response for the unified bank-transfer endpoints (202).\n\nThe transfer runs in the background; poll\nGET /v1/default/banks/{bank_id}/operations/{operation_id}. An export's\n``result_metadata`` carries ``download_url`` / ``storage_key`` /\n``byte_size`` / ``filename``; an import's carries the per-component counts."
+      },
       "Base64AttachmentSource": {
         "properties": {
           "type": {
@@ -8707,6 +9150,21 @@
           "request"
         ],
         "title": "Body_file_retain"
+      },
+      "Body_import_bank_transfer": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "title": "File",
+            "description": "Transfer ZIP archive",
+            "format": "binary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_bank_transfer"
       },
       "Body_import_documents": {
         "properties": {
@@ -9900,6 +10358,98 @@
         "title": "DocumentImportSubmitResponse",
         "description": "Response for the async document-import endpoint (202).\n\nThe import runs in the background; poll the operations endpoint for status.\nThe imported/skipped counts (documents_imported, facts_imported,\nobservations_imported, etc.) are written to the operation's result_metadata."
       },
+      "DocumentListItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Document ID"
+          },
+          "bank_id": {
+            "type": "string",
+            "title": "Bank Id",
+            "description": "Bank the document belongs to",
+            "default": ""
+          },
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash",
+            "description": "Hash of the document text, for idempotent retain"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "When the document was first retained (ISO 8601)",
+            "default": ""
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "When the document was last written (ISO 8601)",
+            "default": ""
+          },
+          "text_length": {
+            "type": "integer",
+            "title": "Text Length",
+            "description": "Length of the stored document text in characters",
+            "default": 0
+          },
+          "memory_unit_count": {
+            "type": "integer",
+            "title": "Memory Unit Count",
+            "description": "Number of memory units extracted from this document",
+            "default": 0
+          },
+          "retain_params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retain Params",
+            "description": "Parameters used during retain"
+          },
+          "document_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Metadata",
+            "description": "Document metadata"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Tags associated with this document",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "DocumentListItem",
+        "description": "One row of the document listing \u2014 a document's metadata without its text.\n\nExtra keys are allowed and passed through: the rows used to be an open object, and\ntyping them must not drop a field an older or newer server also returns."
+      },
       "DocumentResponse": {
         "properties": {
           "id": {
@@ -10322,20 +10872,158 @@
           ]
         }
       },
+      "EntityGraphEdge": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EntityGraphEdgeData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "EntityGraphEdge",
+        "description": "A co-occurrence edge, in the Cytoscape ``{\"data\": {...}}`` envelope the graph uses."
+      },
+      "EntityGraphEdgeData": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Edge ID (``<source>-<target>``)"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Source entity ID"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target",
+            "description": "Target entity ID"
+          },
+          "linkType": {
+            "type": "string",
+            "title": "Linktype",
+            "description": "Kind of relationship this edge represents",
+            "default": "cooccurrence"
+          },
+          "weight": {
+            "type": "integer",
+            "title": "Weight",
+            "description": "Number of co-occurrences between the two entities",
+            "default": 0
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color",
+            "description": "Suggested edge colour for rendering"
+          },
+          "lineStyle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linestyle",
+            "description": "Suggested edge line style for rendering"
+          },
+          "lastCooccurred": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastcooccurred",
+            "description": "ISO 8601 timestamp of the most recent co-occurrence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "target"
+        ],
+        "title": "EntityGraphEdgeData",
+        "description": "The payload of one co-occurrence edge."
+      },
+      "EntityGraphNode": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EntityGraphNodeData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "EntityGraphNode",
+        "description": "An entity node, in the Cytoscape ``{\"data\": {...}}`` envelope the graph uses."
+      },
+      "EntityGraphNodeData": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Entity ID"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Entity canonical name",
+            "default": ""
+          },
+          "mentionCount": {
+            "type": "integer",
+            "title": "Mentioncount",
+            "description": "How many times this entity was mentioned",
+            "default": 0
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color",
+            "description": "Suggested node colour for rendering"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "EntityGraphNodeData",
+        "description": "The payload of one entity node in the co-occurrence graph.\n\nExtra keys are allowed and passed through: the graph payload has always been an open\nobject, and typing it must not drop a field an older or newer server also returns."
+      },
       "EntityGraphResponse": {
         "properties": {
           "nodes": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/EntityGraphNode"
             },
             "type": "array",
             "title": "Nodes"
           },
           "edges": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/EntityGraphEdge"
             },
             "type": "array",
             "title": "Edges"
@@ -10831,24 +11519,21 @@
         "properties": {
           "nodes": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/MemoryGraphNode"
             },
             "type": "array",
             "title": "Nodes"
           },
           "edges": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/MemoryGraphEdge"
             },
             "type": "array",
             "title": "Edges"
           },
           "table_rows": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/MemoryGraphTableRow"
             },
             "type": "array",
             "title": "Table Rows"
@@ -10875,23 +11560,30 @@
         "example": {
           "edges": [
             {
-              "from": "1",
-              "to": "2",
-              "type": "semantic",
-              "weight": 0.8
+              "data": {
+                "id": "1-2-semantic",
+                "linkType": "semantic",
+                "source": "1",
+                "target": "2",
+                "weight": 0.8
+              }
             }
           ],
           "limit": 1000,
           "nodes": [
             {
-              "id": "1",
-              "label": "Alice works at Google",
-              "type": "world"
+              "data": {
+                "id": "1",
+                "label": "Alice works at Google",
+                "text": "Alice works at Google"
+              }
             },
             {
-              "id": "2",
-              "label": "Bob went hiking",
-              "type": "world"
+              "data": {
+                "id": "2",
+                "label": "Bob went hiking",
+                "text": "Bob went hiking"
+              }
             }
           ],
           "table_rows": [
@@ -11855,8 +12547,7 @@
         "properties": {
           "items": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/DocumentListItem"
             },
             "type": "array",
             "title": "Items"
@@ -11908,8 +12599,7 @@
         "properties": {
           "items": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/MemoryUnitListItem"
             },
             "type": "array",
             "title": "Items"
@@ -11941,14 +12631,18 @@
             {
               "context": "Work conversation",
               "date": "2024-01-15T10:30:00Z",
-              "entities": "Alice (PERSON), Google (ORGANIZATION)",
+              "entities": "Alice, Google",
+              "fact_type": "world",
               "id": "550e8400-e29b-41d4-a716-446655440000",
               "metadata": {
                 "channel": "engineering",
                 "source": "slack"
               },
-              "text": "Alice works at Google on the AI team",
-              "type": "world"
+              "state": "valid",
+              "tags": [
+                "user:alice"
+              ],
+              "text": "Alice works at Google on the AI team"
             }
           ],
           "limit": 100,
@@ -12211,6 +12905,308 @@
         "title": "MemoriesTimeseriesResponse",
         "description": "Time-series of memory ingestion bucketed by time and fact type."
       },
+      "MemoryGraphEdge": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MemoryGraphEdgeData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "MemoryGraphEdge",
+        "description": "An edge between two memory units, in the Cytoscape ``{\"data\": {...}}`` envelope."
+      },
+      "MemoryGraphEdgeData": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Edge ID (``<source>-<target>-<linkType>``)"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Source memory unit ID"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target",
+            "description": "Target memory unit ID"
+          },
+          "linkType": {
+            "type": "string",
+            "title": "Linktype",
+            "description": "Link kind: 'entity', 'semantic', 'temporal', ...",
+            "default": ""
+          },
+          "weight": {
+            "type": "number",
+            "title": "Weight",
+            "description": "Link strength",
+            "default": 0.0
+          },
+          "entityName": {
+            "type": "string",
+            "title": "Entityname",
+            "description": "Shared entity for an 'entity' link, empty otherwise",
+            "default": ""
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color",
+            "description": "Suggested edge colour for rendering"
+          },
+          "lineStyle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linestyle",
+            "description": "Suggested edge line style for rendering"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "target"
+        ],
+        "title": "MemoryGraphEdgeData",
+        "description": "The payload of one edge between two memory units."
+      },
+      "MemoryGraphNode": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MemoryGraphNodeData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "MemoryGraphNode",
+        "description": "A memory-unit node, in the Cytoscape ``{\"data\": {...}}`` envelope the graph uses."
+      },
+      "MemoryGraphNodeData": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Memory unit ID"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Short display label (the text, truncated)",
+            "default": ""
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Full memory unit text",
+            "default": ""
+          },
+          "date": {
+            "type": "string",
+            "title": "Date",
+            "description": "Event date (ISO 8601), empty when unknown",
+            "default": ""
+          },
+          "context": {
+            "type": "string",
+            "title": "Context",
+            "description": "Context the memory was captured in",
+            "default": ""
+          },
+          "entities": {
+            "type": "string",
+            "title": "Entities",
+            "description": "Comma-separated entity names, 'None' when there are none",
+            "default": ""
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color",
+            "description": "Suggested node colour for rendering"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "MemoryGraphNodeData",
+        "description": "The payload of one memory-unit node in the memory graph.\n\nExtra keys are allowed and passed through, so typing this never drops a field the\nserver also returns."
+      },
+      "MemoryGraphTableRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Memory unit ID"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Memory unit text",
+            "default": ""
+          },
+          "context": {
+            "type": "string",
+            "title": "Context",
+            "description": "Context the memory was captured in ('N/A' when absent)",
+            "default": ""
+          },
+          "occurred_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred Start",
+            "description": "Start of the event interval (ISO 8601)"
+          },
+          "occurred_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred End",
+            "description": "End of the event interval (ISO 8601)"
+          },
+          "mentioned_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mentioned At",
+            "description": "When the memory was mentioned (ISO 8601)"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date",
+            "description": "Deprecated: formatted event date, kept for backwards compatibility"
+          },
+          "entities": {
+            "type": "string",
+            "title": "Entities",
+            "description": "Comma-separated entity names, 'None' when there are none",
+            "default": ""
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id",
+            "description": "Source document ID"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id",
+            "description": "Source chunk ID"
+          },
+          "fact_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fact Type",
+            "description": "Fact type: world, experience or observation"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Tags on this memory unit",
+            "default": []
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At",
+            "description": "When the memory unit was created (ISO 8601)"
+          },
+          "proof_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proof Count",
+            "description": "How many times the fact was independently seen"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "MemoryGraphTableRow",
+        "description": "One row of the flat table view that accompanies the memory graph."
+      },
       "MemoryItem": {
         "properties": {
           "content": {
@@ -12453,6 +13449,226 @@
         ],
         "title": "MemoryTimeseriesBucket",
         "description": "One bucket in the memory ingestion time-series."
+      },
+      "MemoryUnitListItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Memory unit ID"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "The fact text",
+            "default": ""
+          },
+          "context": {
+            "type": "string",
+            "title": "Context",
+            "description": "Context the memory was captured in",
+            "default": ""
+          },
+          "date": {
+            "type": "string",
+            "title": "Date",
+            "description": "Event date (ISO 8601), empty when unknown",
+            "default": ""
+          },
+          "fact_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fact Type",
+            "description": "Fact type: world, experience or observation"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id",
+            "description": "Source document ID"
+          },
+          "mentioned_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mentioned At",
+            "description": "When the memory was mentioned (ISO 8601)"
+          },
+          "occurred_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred Start",
+            "description": "Start of the event interval (ISO 8601)"
+          },
+          "occurred_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred End",
+            "description": "End of the event interval (ISO 8601)"
+          },
+          "entities": {
+            "type": "string",
+            "title": "Entities",
+            "description": "Comma-separated canonical entity names",
+            "default": ""
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id",
+            "description": "Source chunk ID"
+          },
+          "proof_count": {
+            "type": "integer",
+            "title": "Proof Count",
+            "description": "How many times the fact was independently seen",
+            "default": 1
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Tags on this memory unit",
+            "default": []
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
+            "description": "Arbitrary metadata stored with the memory",
+            "default": {}
+          },
+          "consolidated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consolidated At",
+            "description": "When consolidation last succeeded (ISO 8601)"
+          },
+          "consolidation_failed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consolidation Failed At",
+            "description": "When consolidation last failed permanently (ISO 8601)"
+          },
+          "state": {
+            "type": "string",
+            "title": "State",
+            "description": "Curation state: 'valid' or 'invalidated'",
+            "default": "valid"
+          },
+          "invalidation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invalidation Reason",
+            "description": "Why the fact was invalidated, if it was"
+          },
+          "invalidated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invalidated At",
+            "description": "When the fact was invalidated (ISO 8601)"
+          },
+          "edited_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited At",
+            "description": "When the fact was last edited by hand (ISO 8601)"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At",
+            "description": "Write watermark for this row (ISO 8601)"
+          },
+          "source_memory_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Memory Ids",
+            "description": "An observation's source facts; empty for a source fact",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "MemoryUnitListItem",
+        "description": "One row of the memory-unit listing.\n\nExtra keys are allowed and passed through: the rows used to be an open object, and\ntyping them must not drop a field an older or newer server also returns."
       },
       "MentalModelDeltaOperations": {
         "properties": {
@@ -14879,6 +16095,21 @@
                 "type": "null"
               }
             ]
+          },
+          "attachments": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChunkAttachment"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachments",
+            "description": "Attachments this fact was drawn from, as recorded per fact at extraction time \u2014 the same edge the memory read endpoints return, not everything its chunk happened to carry. A fact stated in prose reports none. Omitted when there are none."
           }
         },
         "type": "object",
@@ -15418,6 +16649,18 @@
             ],
             "title": "Structured Output",
             "description": "Structured output parsed according to the request's response_schema. Only present when response_schema was provided in the request."
+          },
+          "structured_output_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structured Output Error",
+            "description": "Why structured output could not be produced. Present only when a response_schema was given and the extraction call failed (provider error, timeout, unparseable output). A missing structured_output *without* this field means the answer held nothing matching the schema \u2014 the reflect itself still succeeded either way."
           },
           "usage": {
             "anyOf": [
@@ -16319,7 +17562,7 @@
               }
             ],
             "title": "Tags",
-            "description": "New tags for the document and its memory units. Triggers observation invalidation and re-consolidation."
+            "description": "The complete new set of tags for the document and its memory units \u2014 this REPLACES the existing tags rather than adding to them, so omitting a tag drops it and `[]` clears them all. Triggers observation invalidation and re-consolidation."
           }
         },
         "type": "object",

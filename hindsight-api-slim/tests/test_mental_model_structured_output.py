@@ -9,7 +9,6 @@ modes. These are deterministic tests: reflect_async, the delta-ops LLM call, and
 the structured-output extractor are all mocked (no real LLM).
 """
 
-import types
 import uuid
 
 import pytest
@@ -18,6 +17,7 @@ from hindsight_api import MemoryEngine, RequestContext
 from hindsight_api.engine.memory_engine import MentalModelRefreshError
 from hindsight_api.engine.reflect import agent as reflect_agent
 from hindsight_api.engine.reflect.delta_ops import DeltaOperationList
+from hindsight_api.engine.reflect.models import StructuredOutputResult
 from hindsight_api.engine.response_models import LLMCallResult, ReflectResult, TokenUsage
 from tests.conftest import stub_refresh_has_sources
 
@@ -43,18 +43,19 @@ def _canned_reflect_result(text: str, facts: list[dict] | None = None) -> Reflec
     )
 
 
-def _patch_structured_output(monkeypatch, returns: dict) -> list[str]:
-    """Patch _generate_structured_output; record the content it was asked to parse."""
+def _patch_structured_output(monkeypatch, returns: dict | None) -> list[str]:
+    """Patch _generate_structured_output; record the content it was asked to parse.
+
+    ``returns=None`` stands for a failed extraction, which carries the reason in
+    ``error`` the way the real helper does (#4230).
+    """
     calls: list[str] = []
 
     async def fake(answer, response_schema, llm_config, reflect_id, max_tokens=None):
         calls.append(answer)
-        return types.SimpleNamespace(
+        return StructuredOutputResult(
             structured_output=returns,
-            input_tokens=0,
-            output_tokens=0,
-            cached_tokens=0,
-            thoughts_tokens=0,
+            error=None if returns is not None else "RuntimeError: simulated extraction failure",
         )
 
     monkeypatch.setattr(reflect_agent, "_generate_structured_output", fake)
@@ -68,7 +69,7 @@ class TestMentalModelStructuredOutput:
         """Full mode: structured output is parsed from the stored content, and reflect
         is not asked to do the extraction itself."""
         bank_id = f"test-mm-struct-{uuid.uuid4().hex[:8]}"
-        await memory.get_bank_profile(bank_id, request_context=request_context)
+        await memory.ensure_bank_profile(bank_id, request_context=request_context)
         mm = await memory.create_mental_model(
             bank_id=bank_id,
             name="Team",
@@ -103,7 +104,7 @@ class TestMentalModelStructuredOutput:
     ):
         """No trigger schema → no extraction call and no stored structured_output."""
         bank_id = f"test-mm-nostruct-{uuid.uuid4().hex[:8]}"
-        await memory.get_bank_profile(bank_id, request_context=request_context)
+        await memory.ensure_bank_profile(bank_id, request_context=request_context)
         mm = await memory.create_mental_model(
             bank_id=bank_id,
             name="Team",
@@ -133,7 +134,7 @@ class TestMentalModelStructuredOutput:
         """Delta mode: structured output is parsed from the merged document, NOT from
         reflect's partial (delta-only) answer."""
         bank_id = f"test-mm-delta-{uuid.uuid4().hex[:8]}"
-        await memory.get_bank_profile(bank_id, request_context=request_context)
+        await memory.ensure_bank_profile(bank_id, request_context=request_context)
         mm = await memory.create_mental_model(
             bank_id=bank_id,
             name="Doc",
@@ -180,7 +181,7 @@ class TestMentalModelStructuredOutput:
         raises instead of silently persisting content with no structured output —
         and the prior content is preserved for retry."""
         bank_id = f"test-mm-failloud-{uuid.uuid4().hex[:8]}"
-        await memory.get_bank_profile(bank_id, request_context=request_context)
+        await memory.ensure_bank_profile(bank_id, request_context=request_context)
         mm = await memory.create_mental_model(
             bank_id=bank_id,
             name="Doc",

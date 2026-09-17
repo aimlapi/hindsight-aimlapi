@@ -45,7 +45,7 @@ async def _insert_memory(
     store = get_memories()
     fact = SimpleNamespace(
         fact_text=text,
-        embedding=memory.embeddings.encode([text])[0],
+        embedding=(await memory.embeddings.encode([text]))[0],
         fact_type=fact_type,
         tags=[],
         context=None,
@@ -103,7 +103,7 @@ async def _insert_observation(
             record=FactRecord(
                 unit_id=str(obs_id),
                 text=text,
-                embedding=memory.embeddings.encode([text])[0],
+                embedding=(await memory.embeddings.encode([text]))[0],
                 fact_type="observation",
                 proof_count=len(source_memory_ids),
                 source_memory_ids=[str(s) for s in source_memory_ids],
@@ -128,7 +128,7 @@ async def _insert_document(conn, bank_id: str, doc_id: str) -> None:
 
 
 async def _ensure_bank(memory: MemoryEngine, bank_id: str, request_context: RequestContext) -> None:
-    await memory.get_bank_profile(bank_id=bank_id, request_context=request_context)
+    await memory.ensure_bank_profile(bank_id=bank_id, request_context=request_context)
 
 
 def _pin_cache(memory: MemoryEngine) -> None:

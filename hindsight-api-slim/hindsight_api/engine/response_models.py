@@ -406,6 +406,11 @@ class MemoryFact(BaseModel):
         None,
         description="Recall scores from each pipeline stage (final/reranker/semantic/keyword). Not returned for source facts.",
     )
+    # Internal, never serialised: the short ids of the attachments this fact was drawn
+    # from, when the memories store returned them on the row. ``None`` means "not
+    # carried", and the HTTP layer then reads them from `memory_units` instead; a list
+    # (possibly empty) is resolved as-is, so a store that owns its rows is never asked twice.
+    attachment_ids: list[str] | None = Field(None, exclude=True)
 
 
 class ChunkInfo(BaseModel):
@@ -549,6 +554,14 @@ class ReflectResult(BaseModel):
     structured_output: dict[str, Any] | None = Field(
         default=None,
         description="Structured output parsed according to the provided response schema. Only present when response_schema was provided.",
+    )
+    structured_output_error: str | None = Field(
+        default=None,
+        description=(
+            "Why structured output could not be produced, when a response_schema was provided and the "
+            "extraction call failed. Absent when extraction succeeded, so a null structured_output "
+            "without this field means the answer held nothing matching the schema."
+        ),
     )
     usage: TokenUsage | None = Field(
         default=None,

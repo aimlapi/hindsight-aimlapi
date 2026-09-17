@@ -242,6 +242,7 @@ def mock_memory():
     memory.list_tags = AsyncMock(return_value={"items": ["tag1", "tag2"], "total": 2})
     memory._ensure_bank_exists = AsyncMock(return_value=True)
     memory.get_bank_profile = AsyncMock(return_value={"id": "test-bank", "name": "Test Bank", "mission": "Testing"})
+    memory.ensure_bank_profile = AsyncMock(return_value={"id": "test-bank", "name": "Test Bank", "mission": "Testing"})
     memory.get_bank_stats = AsyncMock(return_value={"nodes": 100, "links": 50})
     memory.delete_bank = AsyncMock(return_value={"deleted_memories": 10, "deleted_entities": 5})
 
@@ -673,28 +674,24 @@ class TestGetMentalModel:
 
 
 @pytest.mark.asyncio
-class TestListMentalModelsDetail:
-    """Test the detail parameter for list_mental_models."""
+class TestListMentalModelsMetadataOnly:
+    """list_mental_models is metadata-only: it never returns synthesized content.
 
-    async def test_list_detail_full_includes_reflect_response(self, mcp_server_with_mental_models, mock_memory):
-        result = await _tools(mcp_server_with_mental_models)["list_mental_models"].fn(detail="full")
-        parsed = json.loads(result)
-        item = parsed["items"][0]
-        assert "reflect_response" in item
-        assert "content" in item
-        assert "source_query" in item
+    Listing used to default to full content, which bloated an agent's context and
+    let one call pull a whole bank's synthesized knowledge in bulk. The tool now
+    returns metadata (id/name/tags/staleness); content comes from get_mental_model.
+    """
 
-    async def test_list_detail_content_excludes_reflect_response(self, mcp_server_with_mental_models, mock_memory):
-        result = await _tools(mcp_server_with_mental_models)["list_mental_models"].fn(detail="content")
-        parsed = json.loads(result)
-        item = parsed["items"][0]
-        assert "reflect_response" not in item
-        assert "content" in item
-        assert "source_query" in item
-        assert "trigger" in item
+    async def test_list_has_no_detail_param(self, mcp_server_with_mental_models):
+        # The content-listing capability is gone: there is no way to ask the tool
+        # for content, so an agent cannot bulk-read a bank via the list tool.
+        import inspect
 
-    async def test_list_detail_metadata_only_has_core_fields(self, mcp_server_with_mental_models, mock_memory):
-        result = await _tools(mcp_server_with_mental_models)["list_mental_models"].fn(detail="metadata")
+        fn = _tools(mcp_server_with_mental_models)["list_mental_models"].fn
+        assert "detail" not in inspect.signature(fn).parameters
+
+    async def test_list_returns_metadata_only(self, mcp_server_with_mental_models, mock_memory):
+        result = await _tools(mcp_server_with_mental_models)["list_mental_models"].fn()
         parsed = json.loads(result)
         item = parsed["items"][0]
         assert item["id"] == "mm-1"
@@ -705,14 +702,14 @@ class TestListMentalModelsDetail:
         assert "reflect_response" not in item
         assert "trigger" not in item
 
-    async def test_list_detail_default_is_full(self, mcp_server_with_mental_models, mock_memory):
-        result = await _tools(mcp_server_with_mental_models)["list_mental_models"].fn()
-        parsed = json.loads(result)
-        item = parsed["items"][0]
-        assert "reflect_response" in item
+    async def test_list_requests_metadata_and_staleness_from_engine(self, mcp_server_with_mental_models, mock_memory):
+        await _tools(mcp_server_with_mental_models)["list_mental_models"].fn()
+        kwargs = mock_memory.list_mental_models.await_args.kwargs
+        assert kwargs["detail"] == "metadata"
+        assert kwargs["with_staleness"] is True
 
-    async def test_list_detail_single_bank_metadata(self, mcp_server_single_bank, mock_memory):
-        result = await _tools(mcp_server_single_bank)["list_mental_models"].fn(detail="metadata")
+    async def test_list_single_bank_metadata_only(self, mcp_server_single_bank, mock_memory):
+        result = await _tools(mcp_server_single_bank)["list_mental_models"].fn()
         assert isinstance(result, dict)
         item = result["items"][0]
         assert "id" in item
@@ -1731,21 +1728,21 @@ class TestTagsAndBankTools:
         mcp = _make_mcp_server(mock_memory, {"get_bank"}, include_bank_id=True)
         result = await _tools(mcp)["get_bank"].fn()
         assert '"test-bank"' in result or "test-bank" in result
-        assert mock_memory.get_bank_profile.call_args.kwargs["create_if_missing"] is False
+        mock_memory.ensure_bank_profile.assert_not_awaited()  # the read must not create the bank
 
     async def test_get_bank_missing_does_not_create(self, mock_memory):
         mock_memory.get_bank_profile.return_value = None
         mcp = _make_mcp_server(mock_memory, {"get_bank"}, include_bank_id=True)
         result = await _tools(mcp)["get_bank"].fn(bank_id="missing-bank")
         assert json.loads(result)["error"] == "Bank 'missing-bank' not found"
-        assert mock_memory.get_bank_profile.call_args.kwargs["create_if_missing"] is False
+        mock_memory.ensure_bank_profile.assert_not_awaited()  # the read must not create the bank
 
     async def test_create_bank_uses_public_profile_api(self, mock_memory):
         mcp = _make_mcp_server(mock_memory, {"create_bank"}, include_bank_id=True)
         result = await _tools(mcp)["create_bank"].fn(bank_id="new-bank")
         assert '"test-bank"' in result or "test-bank" in result
-        mock_memory.get_bank_profile.assert_awaited_once()
-        assert mock_memory.get_bank_profile.call_args.args[0] == "new-bank"
+        mock_memory.ensure_bank_profile.assert_awaited_once()
+        assert mock_memory.ensure_bank_profile.call_args.args[0] == "new-bank"
         mock_memory.update_bank.assert_not_awaited()
         mock_memory._ensure_bank_exists.assert_not_awaited()
 
@@ -1761,7 +1758,7 @@ class TestTagsAndBankTools:
         assert mock_memory.update_bank.call_args.args[0] == "new-bank"
         assert mock_memory.update_bank.call_args.kwargs["name"] == "New Bank"
         assert mock_memory.update_bank.call_args.kwargs["mission"] == "Help the user"
-        mock_memory.get_bank_profile.assert_not_awaited()
+        mock_memory.ensure_bank_profile.assert_not_awaited()
         mock_memory._ensure_bank_exists.assert_not_awaited()
 
     async def test_get_bank_stats(self, mock_memory):
@@ -1807,14 +1804,14 @@ class TestTagsAndBankTools:
         mcp = _make_mcp_server(mock_memory, {"get_bank"}, include_bank_id=False)
         result = await _tools(mcp)["get_bank"].fn()
         assert isinstance(result, dict)
-        assert mock_memory.get_bank_profile.call_args.kwargs["create_if_missing"] is False
+        mock_memory.ensure_bank_profile.assert_not_awaited()  # the read must not create the bank
 
     async def test_get_bank_single_bank_missing_does_not_create(self, mock_memory):
         mock_memory.get_bank_profile.return_value = None
         mcp = _make_mcp_server(mock_memory, {"get_bank"}, include_bank_id=False)
         result = await _tools(mcp)["get_bank"].fn()
         assert result["error"] == "Bank 'test-bank' not found"
-        assert mock_memory.get_bank_profile.call_args.kwargs["create_if_missing"] is False
+        mock_memory.ensure_bank_profile.assert_not_awaited()  # the read must not create the bank
 
     async def test_delete_bank_single_bank(self, mock_memory):
         mcp = _make_mcp_server(mock_memory, {"delete_bank"}, include_bank_id=False)

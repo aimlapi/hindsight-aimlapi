@@ -639,6 +639,14 @@ export type BankTemplateConfig = {
    */
   reflect_source_facts_max_tokens?: number | null;
   /**
+   * Knowledge Page Default Trigger
+   *
+   * Trigger fields merged over the built-in knowledge-page default when a page is created (e.g. {"refresh_cron": "0 * * * *"}). A trigger sent with the create request still wins.
+   */
+  knowledge_page_default_trigger?: {
+    [key: string]: unknown;
+  } | null;
+  /**
    * Mental Model Min Refresh Interval Seconds
    *
    * Minimum seconds between two automatic refreshes of the same mental model in this bank. 0 (the default) means no floor. Overridable per model via the trigger's min_refresh_interval_seconds.
@@ -935,6 +943,27 @@ export type BankTemplateMentalModel = {
 };
 
 /**
+ * BankTransferSubmitResponse
+ *
+ * Response for the unified bank-transfer endpoints (202).
+ *
+ * The transfer runs in the background; poll
+ * GET /v1/default/banks/{bank_id}/operations/{operation_id}. An export's
+ * ``result_metadata`` carries ``download_url`` / ``storage_key`` /
+ * ``byte_size`` / ``filename``; an import's carries the per-component counts.
+ */
+export type BankTransferSubmitResponse = {
+  /**
+   * Operation Id
+   */
+  operation_id: string;
+  /**
+   * Status
+   */
+  status?: string;
+};
+
+/**
  * Base64AttachmentSource
  *
  * Inline attachment bytes, base64-encoded.
@@ -978,6 +1007,18 @@ export type BodyFileRetain = {
    * JSON string with FileRetainRequest model
    */
   request: string;
+};
+
+/**
+ * Body_import_bank_transfer
+ */
+export type BodyImportBankTransfer = {
+  /**
+   * File
+   *
+   * Transfer ZIP archive
+   */
+  file: Blob | File;
 };
 
 /**
@@ -1762,6 +1803,81 @@ export type DocumentImportSubmitResponse = {
 };
 
 /**
+ * DocumentListItem
+ *
+ * One row of the document listing — a document's metadata without its text.
+ *
+ * Extra keys are allowed and passed through: the rows used to be an open object, and
+ * typing them must not drop a field an older or newer server also returns.
+ */
+export type DocumentListItem = {
+  /**
+   * Id
+   *
+   * Document ID
+   */
+  id: string;
+  /**
+   * Bank Id
+   *
+   * Bank the document belongs to
+   */
+  bank_id?: string;
+  /**
+   * Content Hash
+   *
+   * Hash of the document text, for idempotent retain
+   */
+  content_hash?: string | null;
+  /**
+   * Created At
+   *
+   * When the document was first retained (ISO 8601)
+   */
+  created_at?: string;
+  /**
+   * Updated At
+   *
+   * When the document was last written (ISO 8601)
+   */
+  updated_at?: string;
+  /**
+   * Text Length
+   *
+   * Length of the stored document text in characters
+   */
+  text_length?: number;
+  /**
+   * Memory Unit Count
+   *
+   * Number of memory units extracted from this document
+   */
+  memory_unit_count?: number;
+  /**
+   * Retain Params
+   *
+   * Parameters used during retain
+   */
+  retain_params?: {
+    [key: string]: unknown;
+  } | null;
+  /**
+   * Document Metadata
+   *
+   * Document metadata
+   */
+  document_metadata?: {
+    [key: string]: unknown;
+  } | null;
+  /**
+   * Tags
+   *
+   * Tags associated with this document
+   */
+  tags?: Array<string>;
+};
+
+/**
  * DocumentResponse
  *
  * Response model for get document endpoint.
@@ -1981,6 +2097,115 @@ export type EntityDetailResponse = {
 };
 
 /**
+ * EntityGraphEdge
+ *
+ * A co-occurrence edge, in the Cytoscape ``{"data": {...}}`` envelope the graph uses.
+ */
+export type EntityGraphEdge = {
+  data: EntityGraphEdgeData;
+};
+
+/**
+ * EntityGraphEdgeData
+ *
+ * The payload of one co-occurrence edge.
+ */
+export type EntityGraphEdgeData = {
+  /**
+   * Id
+   *
+   * Edge ID (``<source>-<target>``)
+   */
+  id: string;
+  /**
+   * Source
+   *
+   * Source entity ID
+   */
+  source: string;
+  /**
+   * Target
+   *
+   * Target entity ID
+   */
+  target: string;
+  /**
+   * Linktype
+   *
+   * Kind of relationship this edge represents
+   */
+  linkType?: string;
+  /**
+   * Weight
+   *
+   * Number of co-occurrences between the two entities
+   */
+  weight?: number;
+  /**
+   * Color
+   *
+   * Suggested edge colour for rendering
+   */
+  color?: string | null;
+  /**
+   * Linestyle
+   *
+   * Suggested edge line style for rendering
+   */
+  lineStyle?: string | null;
+  /**
+   * Lastcooccurred
+   *
+   * ISO 8601 timestamp of the most recent co-occurrence
+   */
+  lastCooccurred?: string | null;
+};
+
+/**
+ * EntityGraphNode
+ *
+ * An entity node, in the Cytoscape ``{"data": {...}}`` envelope the graph uses.
+ */
+export type EntityGraphNode = {
+  data: EntityGraphNodeData;
+};
+
+/**
+ * EntityGraphNodeData
+ *
+ * The payload of one entity node in the co-occurrence graph.
+ *
+ * Extra keys are allowed and passed through: the graph payload has always been an open
+ * object, and typing it must not drop a field an older or newer server also returns.
+ */
+export type EntityGraphNodeData = {
+  /**
+   * Id
+   *
+   * Entity ID
+   */
+  id: string;
+  /**
+   * Label
+   *
+   * Entity canonical name
+   */
+  label?: string;
+  /**
+   * Mentioncount
+   *
+   * How many times this entity was mentioned
+   */
+  mentionCount?: number;
+  /**
+   * Color
+   *
+   * Suggested node colour for rendering
+   */
+  color?: string | null;
+};
+
+/**
  * EntityGraphResponse
  *
  * Response model for entity co-occurrence graph endpoint.
@@ -1989,15 +2214,11 @@ export type EntityGraphResponse = {
   /**
    * Nodes
    */
-  nodes: Array<{
-    [key: string]: unknown;
-  }>;
+  nodes: Array<EntityGraphNode>;
   /**
    * Edges
    */
-  edges: Array<{
-    [key: string]: unknown;
-  }>;
+  edges: Array<EntityGraphEdge>;
   /**
    * Total Entities
    */
@@ -2338,21 +2559,15 @@ export type GraphDataResponse = {
   /**
    * Nodes
    */
-  nodes: Array<{
-    [key: string]: unknown;
-  }>;
+  nodes: Array<MemoryGraphNode>;
   /**
    * Edges
    */
-  edges: Array<{
-    [key: string]: unknown;
-  }>;
+  edges: Array<MemoryGraphEdge>;
   /**
    * Table Rows
    */
-  table_rows: Array<{
-    [key: string]: unknown;
-  }>;
+  table_rows: Array<MemoryGraphTableRow>;
   /**
    * Total Units
    */
@@ -2962,9 +3177,7 @@ export type ListDocumentsResponse = {
   /**
    * Items
    */
-  items: Array<{
-    [key: string]: unknown;
-  }>;
+  items: Array<DocumentListItem>;
   /**
    * Total
    */
@@ -2988,9 +3201,7 @@ export type ListMemoryUnitsResponse = {
   /**
    * Items
    */
-  items: Array<{
-    [key: string]: unknown;
-  }>;
+  items: Array<MemoryUnitListItem>;
   /**
    * Total
    */
@@ -3177,6 +3388,225 @@ export type MemoriesTimeseriesResponse = {
 };
 
 /**
+ * MemoryGraphEdge
+ *
+ * An edge between two memory units, in the Cytoscape ``{"data": {...}}`` envelope.
+ */
+export type MemoryGraphEdge = {
+  data: MemoryGraphEdgeData;
+};
+
+/**
+ * MemoryGraphEdgeData
+ *
+ * The payload of one edge between two memory units.
+ */
+export type MemoryGraphEdgeData = {
+  /**
+   * Id
+   *
+   * Edge ID (``<source>-<target>-<linkType>``)
+   */
+  id: string;
+  /**
+   * Source
+   *
+   * Source memory unit ID
+   */
+  source: string;
+  /**
+   * Target
+   *
+   * Target memory unit ID
+   */
+  target: string;
+  /**
+   * Linktype
+   *
+   * Link kind: 'entity', 'semantic', 'temporal', ...
+   */
+  linkType?: string;
+  /**
+   * Weight
+   *
+   * Link strength
+   */
+  weight?: number;
+  /**
+   * Entityname
+   *
+   * Shared entity for an 'entity' link, empty otherwise
+   */
+  entityName?: string;
+  /**
+   * Color
+   *
+   * Suggested edge colour for rendering
+   */
+  color?: string | null;
+  /**
+   * Linestyle
+   *
+   * Suggested edge line style for rendering
+   */
+  lineStyle?: string | null;
+};
+
+/**
+ * MemoryGraphNode
+ *
+ * A memory-unit node, in the Cytoscape ``{"data": {...}}`` envelope the graph uses.
+ */
+export type MemoryGraphNode = {
+  data: MemoryGraphNodeData;
+};
+
+/**
+ * MemoryGraphNodeData
+ *
+ * The payload of one memory-unit node in the memory graph.
+ *
+ * Extra keys are allowed and passed through, so typing this never drops a field the
+ * server also returns.
+ */
+export type MemoryGraphNodeData = {
+  /**
+   * Id
+   *
+   * Memory unit ID
+   */
+  id: string;
+  /**
+   * Label
+   *
+   * Short display label (the text, truncated)
+   */
+  label?: string;
+  /**
+   * Text
+   *
+   * Full memory unit text
+   */
+  text?: string;
+  /**
+   * Date
+   *
+   * Event date (ISO 8601), empty when unknown
+   */
+  date?: string;
+  /**
+   * Context
+   *
+   * Context the memory was captured in
+   */
+  context?: string;
+  /**
+   * Entities
+   *
+   * Comma-separated entity names, 'None' when there are none
+   */
+  entities?: string;
+  /**
+   * Color
+   *
+   * Suggested node colour for rendering
+   */
+  color?: string | null;
+};
+
+/**
+ * MemoryGraphTableRow
+ *
+ * One row of the flat table view that accompanies the memory graph.
+ */
+export type MemoryGraphTableRow = {
+  /**
+   * Id
+   *
+   * Memory unit ID
+   */
+  id: string;
+  /**
+   * Text
+   *
+   * Memory unit text
+   */
+  text?: string;
+  /**
+   * Context
+   *
+   * Context the memory was captured in ('N/A' when absent)
+   */
+  context?: string;
+  /**
+   * Occurred Start
+   *
+   * Start of the event interval (ISO 8601)
+   */
+  occurred_start?: string | null;
+  /**
+   * Occurred End
+   *
+   * End of the event interval (ISO 8601)
+   */
+  occurred_end?: string | null;
+  /**
+   * Mentioned At
+   *
+   * When the memory was mentioned (ISO 8601)
+   */
+  mentioned_at?: string | null;
+  /**
+   * Date
+   *
+   * Deprecated: formatted event date, kept for backwards compatibility
+   */
+  date?: string | null;
+  /**
+   * Entities
+   *
+   * Comma-separated entity names, 'None' when there are none
+   */
+  entities?: string;
+  /**
+   * Document Id
+   *
+   * Source document ID
+   */
+  document_id?: string | null;
+  /**
+   * Chunk Id
+   *
+   * Source chunk ID
+   */
+  chunk_id?: string | null;
+  /**
+   * Fact Type
+   *
+   * Fact type: world, experience or observation
+   */
+  fact_type?: string | null;
+  /**
+   * Tags
+   *
+   * Tags on this memory unit
+   */
+  tags?: Array<string>;
+  /**
+   * Created At
+   *
+   * When the memory unit was created (ISO 8601)
+   */
+  created_at?: string | null;
+  /**
+   * Proof Count
+   *
+   * How many times the fact was independently seen
+   */
+  proof_count?: number | null;
+};
+
+/**
  * MemoryItem
  *
  * Single memory item for retain.
@@ -3302,6 +3732,151 @@ export type MemoryTimeseriesBucket = {
    * Observations recorded in this bucket.
    */
   observation?: number;
+};
+
+/**
+ * MemoryUnitListItem
+ *
+ * One row of the memory-unit listing.
+ *
+ * Extra keys are allowed and passed through: the rows used to be an open object, and
+ * typing them must not drop a field an older or newer server also returns.
+ */
+export type MemoryUnitListItem = {
+  /**
+   * Id
+   *
+   * Memory unit ID
+   */
+  id: string;
+  /**
+   * Text
+   *
+   * The fact text
+   */
+  text?: string;
+  /**
+   * Context
+   *
+   * Context the memory was captured in
+   */
+  context?: string;
+  /**
+   * Date
+   *
+   * Event date (ISO 8601), empty when unknown
+   */
+  date?: string;
+  /**
+   * Fact Type
+   *
+   * Fact type: world, experience or observation
+   */
+  fact_type?: string | null;
+  /**
+   * Document Id
+   *
+   * Source document ID
+   */
+  document_id?: string | null;
+  /**
+   * Mentioned At
+   *
+   * When the memory was mentioned (ISO 8601)
+   */
+  mentioned_at?: string | null;
+  /**
+   * Occurred Start
+   *
+   * Start of the event interval (ISO 8601)
+   */
+  occurred_start?: string | null;
+  /**
+   * Occurred End
+   *
+   * End of the event interval (ISO 8601)
+   */
+  occurred_end?: string | null;
+  /**
+   * Entities
+   *
+   * Comma-separated canonical entity names
+   */
+  entities?: string;
+  /**
+   * Chunk Id
+   *
+   * Source chunk ID
+   */
+  chunk_id?: string | null;
+  /**
+   * Proof Count
+   *
+   * How many times the fact was independently seen
+   */
+  proof_count?: number;
+  /**
+   * Tags
+   *
+   * Tags on this memory unit
+   */
+  tags?: Array<string>;
+  /**
+   * Metadata
+   *
+   * Arbitrary metadata stored with the memory
+   */
+  metadata?: {
+    [key: string]: unknown;
+  };
+  /**
+   * Consolidated At
+   *
+   * When consolidation last succeeded (ISO 8601)
+   */
+  consolidated_at?: string | null;
+  /**
+   * Consolidation Failed At
+   *
+   * When consolidation last failed permanently (ISO 8601)
+   */
+  consolidation_failed_at?: string | null;
+  /**
+   * State
+   *
+   * Curation state: 'valid' or 'invalidated'
+   */
+  state?: string;
+  /**
+   * Invalidation Reason
+   *
+   * Why the fact was invalidated, if it was
+   */
+  invalidation_reason?: string | null;
+  /**
+   * Invalidated At
+   *
+   * When the fact was invalidated (ISO 8601)
+   */
+  invalidated_at?: string | null;
+  /**
+   * Edited At
+   *
+   * When the fact was last edited by hand (ISO 8601)
+   */
+  edited_at?: string | null;
+  /**
+   * Updated At
+   *
+   * Write watermark for this row (ISO 8601)
+   */
+  updated_at?: string | null;
+  /**
+   * Source Memory Ids
+   *
+   * An observation's source facts; empty for a source fact
+   */
+  source_memory_ids?: Array<string>;
 };
 
 /**
@@ -4739,6 +5314,12 @@ export type RecallResult = {
    */
   source_fact_ids?: Array<string> | null;
   scores?: RecallScores | null;
+  /**
+   * Attachments
+   *
+   * Attachments this fact was drawn from, as recorded per fact at extraction time — the same edge the memory read endpoints return, not everything its chunk happened to carry. A fact stated in prose reports none. Omitted when there are none.
+   */
+  attachments?: Array<ChunkAttachment> | null;
 };
 
 /**
@@ -5044,6 +5625,12 @@ export type ReflectResponse = {
   structured_output?: {
     [key: string]: unknown;
   } | null;
+  /**
+   * Structured Output Error
+   *
+   * Why structured output could not be produced. Present only when a response_schema was given and the extraction call failed (provider error, timeout, unparseable output). A missing structured_output *without* this field means the answer held nothing matching the schema — the reflect itself still succeeded either way.
+   */
+  structured_output_error?: string | null;
   /**
    * Token usage metrics for LLM calls during reflection.
    */
@@ -5609,7 +6196,7 @@ export type UpdateDocumentRequest = {
   /**
    * Tags
    *
-   * New tags for the document and its memory units. Triggers observation invalidation and re-consolidation.
+   * The complete new set of tags for the document and its memory units — this REPLACES the existing tags rather than adding to them, so omitting a tag drops it and `[]` clears them all. Triggers observation invalidation and re-consolidation.
    */
   tags?: Array<string> | null;
 };
@@ -6920,7 +7507,7 @@ export type ListMentalModelsData = {
     /**
      * Detail
      *
-     * Detail level: 'metadata' (names/tags only), 'content' (adds content/config), 'full' (includes reflect_response)
+     * Detail level: 'metadata' (names/tags/staleness — the default), 'content' (adds content/config), 'full' (includes reflect_response). Content is opt-in: it is returned only when explicitly requested.
      */
     detail?: "metadata" | "content" | "full";
     /**
@@ -8677,7 +9264,12 @@ export type CreateOrUpdateBankResponse =
   CreateOrUpdateBankResponses[keyof CreateOrUpdateBankResponses];
 
 export type ImportBankTemplateData = {
-  body?: never;
+  /**
+   * Manifest
+   *
+   * Bank template manifest
+   */
+  body: BankTemplateManifest;
   headers?: {
     /**
      * Authorization
@@ -8894,6 +9486,211 @@ export type ExportDocumentsResponses = {
 
 export type ExportDocumentsResponse = ExportDocumentsResponses[keyof ExportDocumentsResponses];
 
+export type ExportBankTransferData = {
+  body?: never;
+  headers?: {
+    /**
+     * Authorization
+     */
+    authorization?: string | null;
+  };
+  path: {
+    /**
+     * Bank Id
+     */
+    bank_id: string;
+  };
+  query?: {
+    /**
+     * Include Data
+     *
+     * Carry the memories and everything backing them
+     */
+    include_data?: boolean;
+    /**
+     * Include Bank Config
+     *
+     * Carry the bank's config overrides, directives and webhooks
+     */
+    include_bank_config?: boolean;
+    /**
+     * Include History
+     *
+     * Carry audit_log and llm_requests
+     */
+    include_history?: boolean;
+    /**
+     * Document Id
+     *
+     * Document id(s); omit for the whole bank
+     */
+    document_id?: Array<string> | null;
+  };
+  url: "/v1/default/banks/{bank_id}/transfer/export";
+};
+
+export type ExportBankTransferErrors = {
+  /**
+   * The bank does not exist.
+   */
+  404: unknown;
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type ExportBankTransferError = ExportBankTransferErrors[keyof ExportBankTransferErrors];
+
+export type ExportBankTransferResponses = {
+  /**
+   * Successful Response
+   */
+  202: BankTransferSubmitResponse;
+};
+
+export type ExportBankTransferResponse =
+  ExportBankTransferResponses[keyof ExportBankTransferResponses];
+
+export type ImportBankTransferData = {
+  body: BodyImportBankTransfer;
+  headers?: {
+    /**
+     * Authorization
+     */
+    authorization?: string | null;
+  };
+  path: {
+    /**
+     * Bank Id
+     */
+    bank_id: string;
+  };
+  query?: {
+    /**
+     * Mode
+     *
+     * restore (into a fresh bank) | merge (into this bank)
+     */
+    mode?: string;
+    /**
+     * Target Bank Id
+     *
+     * restore mode: the bank to create; defaults to the archive's source bank
+     */
+    target_bank_id?: string | null;
+    /**
+     * Document Conflict
+     *
+     * merge mode: skip | replace | new-id
+     */
+    document_conflict?: string;
+    /**
+     * Include Data
+     *
+     * restore mode: carry the memories and everything backing them (default true)
+     */
+    include_data?: boolean | null;
+    /**
+     * Include Bank Config
+     *
+     * restore mode: restore the bank's config overrides, directives and webhooks (default true)
+     */
+    include_bank_config?: boolean | null;
+    /**
+     * Include History
+     *
+     * restore mode: carry audit_log and llm_requests (default false)
+     */
+    include_history?: boolean | null;
+  };
+  url: "/v1/default/banks/{bank_id}/transfer/import";
+};
+
+export type ImportBankTransferErrors = {
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type ImportBankTransferError = ImportBankTransferErrors[keyof ImportBankTransferErrors];
+
+export type ImportBankTransferResponses = {
+  /**
+   * Successful Response
+   */
+  202: BankTransferSubmitResponse;
+};
+
+export type ImportBankTransferResponse =
+  ImportBankTransferResponses[keyof ImportBankTransferResponses];
+
+export type CloneBankData = {
+  body?: never;
+  headers?: {
+    /**
+     * Authorization
+     */
+    authorization?: string | null;
+  };
+  path: {
+    /**
+     * Bank Id
+     */
+    bank_id: string;
+  };
+  query: {
+    /**
+     * Target Bank Id
+     *
+     * Bank to create; must not already exist
+     */
+    target_bank_id: string;
+    /**
+     * Include Data
+     *
+     * Copy the memories, what backs them, and the mental models and knowledge pages synthesized from them
+     */
+    include_data?: boolean;
+    /**
+     * Include Bank Config
+     *
+     * Copy the bank's config overrides, directives and webhooks
+     */
+    include_bank_config?: boolean;
+    /**
+     * Include History
+     *
+     * Copy audit_log and llm_requests
+     */
+    include_history?: boolean;
+  };
+  url: "/v1/default/banks/{bank_id}/clone";
+};
+
+export type CloneBankErrors = {
+  /**
+   * The bank does not exist.
+   */
+  404: unknown;
+  /**
+   * Validation Error
+   */
+  422: HttpValidationError;
+};
+
+export type CloneBankError = CloneBankErrors[keyof CloneBankErrors];
+
+export type CloneBankResponses = {
+  /**
+   * Successful Response
+   */
+  202: BankTransferSubmitResponse;
+};
+
+export type CloneBankResponse = CloneBankResponses[keyof CloneBankResponses];
+
 export type GetBankAttachmentData = {
   body?: never;
   headers?: {
@@ -8929,8 +9726,11 @@ export type GetBankAttachmentResponses = {
   /**
    * Attachment bytes
    */
-  200: unknown;
+  200: Blob | File;
 };
+
+export type GetBankAttachmentResponse =
+  GetBankAttachmentResponses[keyof GetBankAttachmentResponses];
 
 export type DownloadFileData = {
   body?: never;
@@ -8963,8 +9763,10 @@ export type DownloadFileResponses = {
   /**
    * Stored file
    */
-  200: unknown;
+  200: Blob | File;
 };
+
+export type DownloadFileResponse = DownloadFileResponses[keyof DownloadFileResponses];
 
 export type GetBankTemplateSchemaData = {
   body?: never;

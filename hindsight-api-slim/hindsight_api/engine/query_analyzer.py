@@ -9,7 +9,7 @@ import logging
 import re
 import threading
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from dateparser.conf import Settings, apply_settings
 from pydantic import BaseModel, Field
@@ -21,6 +21,18 @@ from hindsight_api.engine.temporal_periods import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def default_reference_date() -> datetime:
+    """The anchor relative expressions resolve against when no caller supplies one.
+
+    UTC, not the server's local wall clock. ``event_date`` is stored in UTC and
+    ``retrieve_temporal_combined_sql`` stamps a naive window as UTC, so a window
+    built from local midnight names a different day for part of every day on a
+    server outside UTC. Naive, to keep the returned window's shape unchanged.
+    """
+    return datetime.now(UTC).replace(tzinfo=None)
+
 
 # dateparser.search_dates over-matches: short common words that happen to be
 # weekday/month abbreviations in *some* language ("we"/"me"/"did" -> a weekday,
@@ -214,11 +226,9 @@ class QueryAnalysis(BaseModel):
 # ``regex`` extension, which is handed borrowed references into a dict another
 # thread is resizing.
 #
-# Under the GIL this is rare enough to have gone unnoticed; on a free-threaded
-# build (``python3.14t``) it is immediate — six event loops in one process, each
-# warming its own analyzer on the default executor, crash the interpreter with
-# SIGSEGV in under a minute (traceback bottoming out in
-# ``dateparser/languages/dictionary.py`` ``split`` -> ``_regex...so``).
+# It is rare, because the threads have to interleave inside the cache build, but
+# it is a hard crash when it lands: SIGSEGV with the traceback bottoming out in
+# ``dateparser/languages/dictionary.py`` ``split`` -> ``_regex...so``.
 #
 # One process-wide lock around every entry into dateparser fixes both. It costs
 # nothing on the recall path, which already funnels through the single-worker
@@ -255,7 +265,7 @@ class QueryAnalyzer(ABC):
 
         Args:
             query: Natural language query to analyze
-            reference_date: Reference date for relative terms (defaults to now)
+            reference_date: Reference date for relative terms (defaults to the current UTC time)
 
         Returns:
             QueryAnalysis containing extracted information
@@ -305,7 +315,7 @@ class DateparserQueryAnalyzer(QueryAnalyzer):
 
         # Serialised against every other entry into dateparser: warming builds
         # its process-global locale caches, and a second thread reading them
-        # mid-build is what crashes free-threaded builds. See _DATEPARSER_LOCK.
+        # mid-build is what segfaults the interpreter. See _DATEPARSER_LOCK.
         with _DATEPARSER_LOCK:
             if self._loaded:
                 return
@@ -377,13 +387,13 @@ class DateparserQueryAnalyzer(QueryAnalyzer):
 
         Args:
             query: Natural language query (any language)
-            reference_date: Reference date for relative terms (defaults to now)
+            reference_date: Reference date for relative terms (defaults to the current UTC time)
 
         Returns:
             QueryAnalysis with temporal_constraint if found
         """
         if reference_date is None:
-            reference_date = datetime.now()
+            reference_date = default_reference_date()
 
         # Check for period expressions first (these need special handling)
         query_lower = query.lower()
@@ -605,13 +615,13 @@ class TransformerQueryAnalyzer(QueryAnalyzer):
 
         Args:
             query: Natural language query
-            reference_date: Reference date for relative terms (defaults to now)
+            reference_date: Reference date for relative terms (defaults to the current UTC time)
 
         Returns:
             QueryAnalysis with temporal_constraint if found
         """
         if reference_date is None:
-            reference_date = datetime.now()
+            reference_date = default_reference_date()
 
         # Try rule-based extraction first (handles 90%+ of cases)
         result = self._extract_with_rules(query, reference_date)
