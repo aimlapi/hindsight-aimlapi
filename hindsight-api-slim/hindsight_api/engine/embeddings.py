@@ -2242,15 +2242,18 @@ def create_embeddings_from_env() -> Embeddings:
                 f"or {ENV_LLM_API_KEY} is required when {ENV_EMBEDDINGS_PROVIDER} is 'aimlapi'"
             )
         aimlapi_base_url = "https://api.aimlapi.com/v1"
-        return OpenAIEmbeddings(
-            api_key=api_key,
-            model=config.embeddings_aimlapi_model,
-            base_url=aimlapi_base_url,
-            batch_size=config.embeddings_openai_batch_size,
-            dimensions=config.embeddings_openai_dimensions,
-            query_prefix=query_prefix,
-            passage_prefix=passage_prefix,
-            default_headers=aimlapi_default_headers("aimlapi", aimlapi_base_url, None),
+        return _with_request_concurrency(
+            OpenAIEmbeddings(
+                api_key=api_key,
+                model=config.embeddings_aimlapi_model,
+                base_url=aimlapi_base_url,
+                batch_size=config.embeddings_openai_batch_size,
+                dimensions=config.embeddings_openai_dimensions,
+                query_prefix=query_prefix,
+                passage_prefix=passage_prefix,
+                default_headers=aimlapi_default_headers("aimlapi", aimlapi_base_url, None),
+            ),
+            config,
         )
     elif provider == "zeroentropy":
         api_key = config.embeddings_zeroentropy_api_key
